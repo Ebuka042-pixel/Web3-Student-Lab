@@ -1,32 +1,35 @@
 'use client';
 
 import { VirtualizedFileTree, type FileTreeNode } from '@/components/explorer/VirtualizedFileTree';
-const PrSimulationPanel = dynamic(() => import('@/components/playground/PrSimulationPanel').then((mod) => mod.PrSimulationPanel), {
-  ssr: false,
-});
+import { AccessibilityAuditPanel } from '@/components/playground/AccessibilityAuditPanel';
+import { AssistantPanel } from '@/components/playground/AssistantPanel';
+import { ContractSearch } from '@/components/playground/ContractSearch';
+import { DependencyUpdatePanel } from '@/components/playground/DependencyUpdatePanel';
+import { ExecutionStatusBar } from '@/components/playground/ExecutionStatusBar';
 import { OfflineIndicator } from '@/components/storage/OfflineIndicator';
 import {
-    CompileOutputTerminal,
-    type CompileLogEntry,
+    CompileOutputTerminal
 } from '@/components/terminal/CompileOutputTerminal';
 import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { WithSkeleton } from '@/components/ui/WithSkeleton';
 import { EditorSkeleton } from '@/components/ui/skeletons/EditorSkeleton';
 import { useTutorial } from '@/contexts/TutorialContext';
+import { useAccessibilityAudit } from '@/hooks/useAccessibilityAudit';
+import { usePlaygroundExecution } from '@/hooks/usePlaygroundExecution';
 import { CollaborationProvider } from '@/lib/collaboration/YjsProvider';
 import { FilePresenceManager } from '@/lib/explorer/FilePresence';
 import { DatabaseManager } from '@/lib/storage/DatabaseManager';
 import { SyncManager } from '@/lib/storage/SyncManager';
 import { Settings, X } from 'lucide-react';
-import { DependencyUpdatePanel } from '@/components/playground/DependencyUpdatePanel';
-import { AccessibilityAuditPanel } from '@/components/playground/AccessibilityAuditPanel';
-import { ContractSearch } from '@/components/playground/ContractSearch';
-import { ExecutionStatusBar } from '@/components/playground/ExecutionStatusBar';
-import { useAccessibilityAudit } from '@/hooks/useAccessibilityAudit';
-import { usePlaygroundExecution } from '@/hooks/usePlaygroundExecution';
-import { AssistantPanel } from '@/components/playground/AssistantPanel';
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+const PrSimulationPanel = dynamic(() => import('@/components/playground/PrSimulationPanel').then((mod) => mod.PrSimulationPanel), {
+  ssr: false,
+});
+
+const AuthMatrixModal = dynamic(() => import('@/components/playground/AuthMatrixModal').then((mod) => mod.AuthMatrixModal), {
+  ssr: false,
+});
 
 const CodeEditor = dynamic(() => import('@/components/playground/CodeEditor').then((mod) => mod.CodeEditor), {
   ssr: false,
@@ -151,7 +154,7 @@ impl HelloContract {
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'offline' | 'error'>('idle');
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'prsim'>('editor');
+  const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'prsim' | 'auth'>('editor');
 
   // ── Cancellable execution hook ──────────────────────────────────────────
   const {
@@ -309,7 +312,7 @@ impl HelloContract {
           </div>
         </div>
 
-        {/* Desktop PR Sim Tab */}
+        {/* Desktop Tab Switcher */}
         <div className="hidden lg:flex mb-6 gap-1 rounded-xl border border-white/10 bg-zinc-950 p-1">
           <button
             onClick={() => setActiveTab('editor')}
@@ -330,6 +333,16 @@ impl HelloContract {
             }`}
           >
             PR Simulation
+          </button>
+          <button
+            onClick={() => setActiveTab('auth')}
+            className={`flex-1 py-3 text-xs font-bold tracking-widest uppercase rounded-lg transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'auth'
+                ? 'bg-red-600 text-white'
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Auth Matrix
           </button>
         </div>
 
@@ -353,7 +366,7 @@ impl HelloContract {
                 : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            Output & Terminal
+            Output
           </button>
           <button
             onClick={() => setActiveTab('prsim')}
@@ -365,7 +378,24 @@ impl HelloContract {
           >
             PR Sim
           </button>
+          <button
+            onClick={() => setActiveTab('auth')}
+            className={`flex-1 py-3 text-xs font-bold tracking-widest uppercase rounded-lg transition-all min-h-[44px] flex items-center justify-center ${
+              activeTab === 'auth'
+                ? 'bg-red-600 text-white'
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            Auth
+          </button>
         </div>
+
+        {/* Auth Matrix Panel — standalone view */}
+        {activeTab === 'auth' && (
+          <div className="lg:hidden flex-grow">
+            <AuthMatrixModal className="h-full" />
+          </div>
+        )}
 
         {/* PR Simulation Panel — standalone view */}
         {activeTab === 'prsim' && (
@@ -374,7 +404,7 @@ impl HelloContract {
           </div>
         )}
 
-        <div className={`grid flex-grow grid-cols-1 gap-12 lg:grid-cols-2 ${activeTab === 'prsim' ? 'hidden lg:grid' : ''}`}>
+        <div className={`grid flex-grow grid-cols-1 gap-12 lg:grid-cols-2 ${activeTab === 'prsim' || activeTab === 'auth' ? 'hidden lg:grid' : ''}`}>
           {/* Editor Placeholder */}
           <div className="relative flex min-h-[600px] flex-col rounded-3xl border border-white/10 bg-zinc-950 p-8 shadow-2xl" data-tour-step="playground-editor">
             <div className="mb-6 flex items-center justify-between gap-2 border-b border-white/5 pb-4">
@@ -461,10 +491,12 @@ impl HelloContract {
             />
           </div>
 
-          {/* Terminal Output or PR Simulation */}
+          {/* Terminal Output or PR Simulation or Auth Matrix */}
           <div className="flex flex-col gap-6" data-tour-step="playground-output">
             {activeTab === 'prsim' ? (
               <PrSimulationPanel />
+            ) : activeTab === 'auth' ? (
+              <AuthMatrixModal />
             ) : (
               <>
                 <CompileOutputTerminal logs={compileLogs} isCompiling={isCompiling} />
